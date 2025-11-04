@@ -158,7 +158,18 @@ pub struct SensorData {
 }
 
 /// ICM42688 driver
-pub struct ICM42688<SPI, D> {
+///
+/// # Type Parameters
+/// - `SPI`: SPI device implementation
+/// - `D`: Delay implementation
+/// - `GYRO_ACCEL_FIFO_SIZE`: Size of the FIFO buffers for gyroscope and accelerometer data (default: 85)
+/// - `TEMP_FIFO_SIZE`: Size of the FIFO buffer for temperature data (default: 256)
+pub struct ICM42688<
+    SPI,
+    D,
+    const GYRO_ACCEL_FIFO_SIZE: usize = 85,
+    const TEMP_FIFO_SIZE: usize = 256,
+> {
     spi: SPI,
     delay: D,
     bank: u8,
@@ -192,19 +203,20 @@ pub struct ICM42688<SPI, D> {
     fifo_size: usize,
 
     // FIFO data buffers
-    ax_fifo: [f32; 85],
-    ay_fifo: [f32; 85],
-    az_fifo: [f32; 85],
-    gx_fifo: [f32; 85],
-    gy_fifo: [f32; 85],
-    gz_fifo: [f32; 85],
-    t_fifo: [f32; 256],
+    ax_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    ay_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    az_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    gx_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    gy_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    gz_fifo: [f32; GYRO_ACCEL_FIFO_SIZE],
+    t_fifo: [f32; TEMP_FIFO_SIZE],
     a_size: usize,
     g_size: usize,
     t_size: usize,
 }
 
-impl<SPI, D> ICM42688<SPI, D>
+impl<SPI, D, const GYRO_ACCEL_FIFO_SIZE: usize, const TEMP_FIFO_SIZE: usize>
+    ICM42688<SPI, D, GYRO_ACCEL_FIFO_SIZE, TEMP_FIFO_SIZE>
 where
     SPI: embedded_hal_async::spi::SpiDevice,
     D: embedded_hal_async::delay::DelayNs,
@@ -237,13 +249,13 @@ where
             fifo_size: 0,
 
             // FIFO data buffers
-            ax_fifo: [0.0; 85],
-            ay_fifo: [0.0; 85],
-            az_fifo: [0.0; 85],
-            gx_fifo: [0.0; 85],
-            gy_fifo: [0.0; 85],
-            gz_fifo: [0.0; 85],
-            t_fifo: [0.0; 256],
+            ax_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            ay_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            az_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            gx_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            gy_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            gz_fifo: [0.0; GYRO_ACCEL_FIFO_SIZE],
+            t_fifo: [0.0; TEMP_FIFO_SIZE],
             a_size: 0,
             g_size: 0,
             t_size: 0,
@@ -692,7 +704,7 @@ where
                 ];
 
                 // Transform and convert to float values
-                if i < 85 {
+                if i < GYRO_ACCEL_FIFO_SIZE {
                     self.ax_fifo[i] = ((raw_meas[0] as f32 * self.accel_scale)
                         - self.accel_bias[0])
                         * self.accel_scale_factor[0];
@@ -709,7 +721,7 @@ where
             if self.en_fifo_temp {
                 let raw_meas = frame_buffer[temp_index] as i8;
                 // Transform and convert to float values (temperature conversion)
-                if i < 256 {
+                if i < TEMP_FIFO_SIZE {
                     self.t_fifo[i] = (raw_meas as f32 / 132.48) + 25.0;
                 }
                 self.t_size = num_frames;
@@ -727,7 +739,7 @@ where
                 ];
 
                 // Transform and convert to float values
-                if i < 85 {
+                if i < GYRO_ACCEL_FIFO_SIZE {
                     self.gx_fifo[i] = (raw_meas[0] as f32 * self.gyro_scale) - self.gyro_bias[0];
                     self.gy_fifo[i] = (raw_meas[1] as f32 * self.gyro_scale) - self.gyro_bias[1];
                     self.gz_fifo[i] = (raw_meas[2] as f32 * self.gyro_scale) - self.gyro_bias[2];
@@ -741,40 +753,58 @@ where
 
     /// Get accelerometer FIFO data in X direction (m/s²)
     pub fn get_fifo_accel_x(&self) -> (&[f32], usize) {
-        (&self.ax_fifo[..self.a_size.min(85)], self.a_size)
+        (
+            &self.ax_fifo[..self.a_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.a_size,
+        )
     }
 
     /// Get accelerometer FIFO data in Y direction (m/s²)
     pub fn get_fifo_accel_y(&self) -> (&[f32], usize) {
-        (&self.ay_fifo[..self.a_size.min(85)], self.a_size)
+        (
+            &self.ay_fifo[..self.a_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.a_size,
+        )
     }
 
     /// Get accelerometer FIFO data in Z direction (m/s²)
     pub fn get_fifo_accel_z(&self) -> (&[f32], usize) {
-        (&self.az_fifo[..self.a_size.min(85)], self.a_size)
+        (
+            &self.az_fifo[..self.a_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.a_size,
+        )
     }
 
     /// Get gyroscope FIFO data in X direction (rad/s)
     #[inline(always)]
     pub fn get_fifo_gyro_x(&self) -> (&[f32], usize) {
-        (&self.gx_fifo[..self.g_size.min(85)], self.g_size)
+        (
+            &self.gx_fifo[..self.g_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.g_size,
+        )
     }
 
     /// Get gyroscope FIFO data in Y direction (rad/s)
     #[inline(always)]
     pub fn get_fifo_gyro_y(&self) -> (&[f32], usize) {
-        (&self.gy_fifo[..self.g_size.min(85)], self.g_size)
+        (
+            &self.gy_fifo[..self.g_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.g_size,
+        )
     }
 
     /// Get gyroscope FIFO data in Z direction (rad/s)
     #[inline(always)]
     pub fn get_fifo_gyro_z(&self) -> (&[f32], usize) {
-        (&self.gz_fifo[..self.g_size.min(85)], self.g_size)
+        (
+            &self.gz_fifo[..self.g_size.min(GYRO_ACCEL_FIFO_SIZE)],
+            self.g_size,
+        )
     }
 
     /// Get temperature FIFO data (°C)
     pub fn get_fifo_temperature(&self) -> (&[f32], usize) {
-        (&self.t_fifo[..self.t_size.min(256)], self.t_size)
+        (&self.t_fifo[..self.t_size.min(TEMP_FIFO_SIZE)], self.t_size)
     }
 
     /// Get FIFO size
