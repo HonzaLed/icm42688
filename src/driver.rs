@@ -395,10 +395,11 @@ where
         // Set accelerometer filters
         self.set_bank(2).await?;
 
+        // & 0x30 to keep default register reset value
         let accel_config = if accel_filters {
-            0x00 // Enable filters
+            0x00 & 0x30 // Enable filters
         } else {
-            0x01 // Disable filters
+            0x01 & 0x30 // Disable filters
         };
 
         self.write_register(registers::ub2::REG_ACCEL_CONFIG_STATIC2, accel_config)
