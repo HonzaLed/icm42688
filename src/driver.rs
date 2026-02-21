@@ -182,17 +182,6 @@ pub struct ICM42688<
     accel_fs: AccelFS,
     gyro_fs: GyroFS,
 
-    // Calibration data
-    accel_bias: [f32; 3],
-    gyro_bias: [f32; 3],
-    accel_scale_factor: [f32; 3],
-
-    // Raw offset data
-    raw_accel_bias: [i32; 3],
-    raw_gyro_bias: [i32; 3],
-    accel_offset: [i16; 3],
-    gyro_offset: [i16; 3],
-
     // FIFO configuration
     en_fifo_accel: bool,
     en_fifo_gyro: bool,
@@ -231,13 +220,6 @@ where
             gyro_scale: (2000.0 / 32768.0f32).to_radians(), // Default 2000dps
             accel_fs: AccelFS::Gpm16,
             gyro_fs: GyroFS::Dps2000,
-            accel_bias: [0.0; 3],
-            gyro_bias: [0.0; 3],
-            accel_scale_factor: [1.0; 3],
-            raw_accel_bias: [0; 3],
-            raw_gyro_bias: [0; 3],
-            accel_offset: [0; 3],
-            gyro_offset: [0; 3],
 
             // FIFO configuration
             en_fifo_accel: false,
@@ -443,54 +425,15 @@ where
 
         // Convert accelerometer data
         for i in 0..3 {
-            sensor_data.accel[i] = ((raw_data.accel[i] as f32 * self.accel_scale)
-                - self.accel_bias[i])
-                * self.accel_scale_factor[i];
+            sensor_data.accel[i] = raw_data.accel[i] as f32 * self.accel_scale;
         }
 
         // Convert gyroscope data
         for i in 0..3 {
-            sensor_data.gyro[i] = (raw_data.gyro[i] as f32 * self.gyro_scale) - self.gyro_bias[i];
+            sensor_data.gyro[i] = raw_data.gyro[i] as f32 * self.gyro_scale;
         }
 
         Ok(sensor_data)
-    }
-
-    /// Set gyroscope bias (useful for custom calibration procedures)
-    pub fn set_gyro_bias(&mut self, bias: [f32; 3]) {
-        self.gyro_bias = bias;
-    }
-
-    /// Calibrate gyroscope
-    pub async fn calibrate_gyro(&mut self) -> Result<(), Error<SPI::Error>> {
-        // Take samples and find bias
-        let mut bias_sum = [0.0f32; 3];
-        const NUM_SAMPLES: usize = 1000;
-
-        for _ in 0..NUM_SAMPLES {
-            let data = self.get_sensor_data().await?;
-
-            // If the gyro is moving, fail the calibration
-            if data.gyro[0].abs() > 3f32.to_radians()
-                || data.gyro[1].abs() > 3f32.to_radians()
-                || data.gyro[2].abs() > 3f32.to_radians()
-            {
-                return Err(Error::CalibrationFailed);
-            }
-
-            bias_sum[0] += data.gyro[0];
-            bias_sum[1] += data.gyro[1];
-            bias_sum[2] += data.gyro[2];
-            self.delay.delay_ms(1).await;
-        }
-        bias_sum[0] /= NUM_SAMPLES as f32;
-        bias_sum[1] /= NUM_SAMPLES as f32;
-        bias_sum[2] /= NUM_SAMPLES as f32;
-
-        // Update bias values
-        self.gyro_bias = bias_sum;
-
-        Ok(())
     }
 
     /// Get accelerometer resolution
@@ -706,15 +649,9 @@ where
 
                 // Transform and convert to float values
                 if i < GYRO_ACCEL_FIFO_SIZE {
-                    self.ax_fifo[i] = ((raw_meas[0] as f32 * self.accel_scale)
-                        - self.accel_bias[0])
-                        * self.accel_scale_factor[0];
-                    self.ay_fifo[i] = ((raw_meas[1] as f32 * self.accel_scale)
-                        - self.accel_bias[1])
-                        * self.accel_scale_factor[1];
-                    self.az_fifo[i] = ((raw_meas[2] as f32 * self.accel_scale)
-                        - self.accel_bias[2])
-                        * self.accel_scale_factor[2];
+                    self.ax_fifo[i] = raw_meas[0] as f32 * self.accel_scale;
+                    self.ay_fifo[i] = raw_meas[1] as f32 * self.accel_scale;
+                    self.az_fifo[i] = raw_meas[2] as f32 * self.accel_scale;
                 }
                 self.a_size = num_frames;
             }
@@ -741,9 +678,9 @@ where
 
                 // Transform and convert to float values
                 if i < GYRO_ACCEL_FIFO_SIZE {
-                    self.gx_fifo[i] = (raw_meas[0] as f32 * self.gyro_scale) - self.gyro_bias[0];
-                    self.gy_fifo[i] = (raw_meas[1] as f32 * self.gyro_scale) - self.gyro_bias[1];
-                    self.gz_fifo[i] = (raw_meas[2] as f32 * self.gyro_scale) - self.gyro_bias[2];
+                    self.gx_fifo[i] = raw_meas[0] as f32 * self.gyro_scale;
+                    self.gy_fifo[i] = raw_meas[1] as f32 * self.gyro_scale;
+                    self.gz_fifo[i] = raw_meas[2] as f32 * self.gyro_scale;
                 }
                 self.g_size = num_frames;
             }
